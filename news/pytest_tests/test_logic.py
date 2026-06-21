@@ -78,8 +78,8 @@ def test_edit_comment_user_and_anonymous(
         expected_status: ожидаемый HTTP‑статус ответа сервера.
     """
     url = reverse('news:edit', kwargs={'pk': comment_fixture.pk})
-    edit_comment = {'text': 'Отредактированный комментарий'}
-    response = client.post(url, edit_comment, follow=False)
+    edit_data = {'text': 'Отредактированный комментарий'}
+    response = client.post(url, edit_data, follow=False)
     assert response.status_code == expected_status
     comment_fixture.refresh_from_db()
     if edit_comment:
