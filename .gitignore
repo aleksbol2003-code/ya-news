@@ -17,6 +17,8 @@ __pycache__/
 
 static/
 media/
+news/tests/1.py
+news/tests/test_trial.py
 
 db.sqlite3
 

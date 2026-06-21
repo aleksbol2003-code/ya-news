@@ -1,23 +1,50 @@
 # news/tests/test_routes.py
+"""
+Тесты маршрутизации веб‑приложения YaNews.
+
+Проверяемые сценарии:
+* доступность основных страниц приложения для анонимных пользователей;
+* разграничение доступа к операциям редактирования и удаления комментариев
+  (только для автора);
+* редиректы на страницу логина для неавторизованных пользователей
+  при попытке доступа к защищённым страницам.
+"""
+
 from http import HTTPStatus
 
-# Импортируем функцию для определения модели пользователя.
-from django.contrib.auth import get_user_model
-from django.test import TestCase
-from django.urls import reverse
+from django.contrib.auth import get_user_model  # type: ignore
+from django.test import TestCase  # type: ignore
+from django.urls import reverse  # type: ignore
 
-
-# Импортируем класс комментария.
 from news.models import Comment, News
 
-# Получаем модель пользователя.
 User = get_user_model()
 
 
 class TestRoutes(TestCase):
+    """
+    Набор тестов для проверки корректности маршрутизации и прав доступа.
+
+    Проверяет:
+    * доступность публичных страниц (главная, новость, регистрация, логин);
+    * разграничение прав на редактирование/удаление комментариев
+      (автор vs другой пользователь);
+    * редиректы для анонимных пользователей при попытке доступа
+      к защищённым маршрутам.
+    """
 
     @classmethod
     def setUpTestData(cls):
+        """
+        Подготовка тестовых данных для всех тестов класса.
+
+        Создаёт:
+        * тестовую новость;
+        * двух пользователей (автора комментария и читателя);
+        * комментарий к новости, автором которого является первый пользователь.
+
+        Сохраняет созданные объекты в атрибуты класса.
+        """
         cls.news = News.objects.create(title='Заголовок', text='Текст')
         # Создаём двух пользователей с разными именами:
         cls.author = User.objects.create(username='Лев Толстой')
@@ -30,22 +57,41 @@ class TestRoutes(TestCase):
         )
 
     def test_pages_availability(self):
+        """
+        Тест доступности публичных страниц приложения.
+
+        Проверяет, что основные публичные страницы доступны
+        для анонимных пользователей (статус ответа HTTPStatus.OK).
+
+        Тестируемые страницы:
+        * главная страница;
+        * страница новости;
+        * страница логина;
+        * страница регистрации.
+
+        Шаги:
+        1. Формирует список тестируемых маршрутов с их аргументами.
+        2. Для каждого маршрута:
+           - получает URL через reverse();
+           - выполняет GET‑запрос;
+           - проверяет статус ответа (200 OK).
+        """
         # Создаём набор тестовых данных - кортеж кортежей.
         # Каждый вложенный кортеж содержит два элемента:
         # имя пути и позиционные аргументы для функции reverse().
         urls = (
             # Путь для главной страницы не принимает
-            # никаких позиционных аргументов, 
+            # никаких позиционных аргументов,
             # поэтому вторым параметром ставим None.
             ('news:home', None),
-            # Путь для страницы новости 
+            # Путь для страницы новости
             # принимает в качестве позиционного аргумента
             # id записи; передаём его в кортеже.
             ('news:detail', (self.news.id,)),
             ('users:login', None),
             ('users:signup', None),
         )
-        # Итерируемся по внешнему кортежу 
+        # Итерируемся по внешнему кортежу
         # и распаковываем содержимое вложенных кортежей:
         for name, args in urls:
             with self.subTest(name=name):
@@ -53,82 +99,71 @@ class TestRoutes(TestCase):
                 # и получаем адрес страницы для GET-запроса:
                 url = reverse(name, args=args)
                 response = self.client.get(url)
-                self.assertEqual(response.status_code, HTTPStatus.OK) 
+                self.assertEqual(response.status_code, HTTPStatus.OK)
 
     def test_availability_for_comment_edit_and_delete(self):
+        """
+        Тест разграничения прав доступа к редактированию и удалению коммент.
+
+        Проверяет, что:
+        * автор комментария может получить доступ к страницам редактирования
+          и удаления (статус 200);
+        * другой пользователь не может получить доступ к этим страницам
+          (статус 404).
+
+        Шаги:
+        1. Определяет пары «пользователь — ожидаемый статус ответа».
+        2. Для каждой пары:
+           - авторизует клиента под пользователем;
+           - для каждого из маршрутов (редактирование, удаление):
+             - формирует URL;
+             - выполняет GET‑запрос;
+             - проверяет статус ответа.
+        """
         users_statuses = (
-            (self.author, HTTPStatus.OK),  # автор комментария должен получить ответ OK,
-            (self.reader, HTTPStatus.NOT_FOUND),  # читатель должен получить ответ NOT_FOUND.
+            (self.author, HTTPStatus.OK),  # автор комментария ждет ответ OK,
+            (self.reader, HTTPStatus.NOT_FOUND),  # читатель NOT_FOUND.
         )
         for user, status in users_statuses:
             # Логиним пользователя в клиенте:
             self.client.force_login(user)
             # Для каждой пары "пользователь - ожидаемый ответ"
             # перебираем имена тестируемых страниц:
-            for name in ('news:edit', 'news:delete'):  
-                with self.subTest(user=user, name=name):        
+            for name in ('news:edit', 'news:delete'):
+                with self.subTest(user=user, name=name):
                     url = reverse(name, args=(self.comment.id,))
                     response = self.client.get(url)
                     self.assertEqual(response.status_code, status)
 
     def test_redirect_for_anonymous_client(self):
+        """
+        Тест редиректов для анонимных пользователей.
+
+        Проверяет, что при попытке доступа к страницам редактирования или
+        удаления комментария анонимный пользователь перенаправляется на
+        страницу логина с параметром next (адрес исходной страницы).
+
+        Шаги:
+        1. Получает URL страницы логина.
+        2. Для каждого из маршрутов (редактирование, удаление):
+           - формирует URL страницы;
+           - формирует ожидаемый URL редиректа (логин + next);
+           - выполняет GET‑запрос от анонимного клиента;
+           - проверяет, что редирект ведёт на ожидаемую страницу.
+        """
         # Сохраняем адрес страницы логина:
         login_url = reverse('users:login')
         # В цикле перебираем имена страниц, с которых ожидаем редирект:
         for name in ('news:edit', 'news:delete'):
             with self.subTest(name=name):
-                # Получаем адрес страницы редактирования или удаления комментария:
+                # Получаем адрес страницы редактирования или удаления коммент.:
                 url = reverse(name, args=(self.comment.id,))
-                # Получаем ожидаемый адрес страницы логина, 
+                # Получаем ожидаемый адрес страницы логина,
                 # на который будет перенаправлен пользователь.
-                # Учитываем, что в адресе будет параметр next, в котором передаётся
-                # адрес страницы, с которой пользователь был переадресован.
+                # Учитываем, что в адресе будет параметр next,
+                # в котором передаётся адрес страницы,
+                # с которой пользователь был переадресован.
                 redirect_url = f'{login_url}?next={url}'
                 response = self.client.get(url)
                 # Проверяем, что редирект приведёт именно на указанную ссылку.
                 self.assertRedirects(response, redirect_url)
-
-
-'''
-# news/tests/test_routes.py
-from http import HTTPStatus
-
-from django.test import TestCase
-from django.urls import reverse
-
-from news.models import News
-
-
-class TestRoutes(TestCase):
-
-    @classmethod
-    def setUpTestData(cls):
-        cls.news = News.objects.create(title='Заголовок', text='Текст')
-
-    def test_home_page(self):
-        url = reverse('news:home')
-        response = self.client.get(url)
-        self.assertEqual(response.status_code, HTTPStatus.OK)
-
-    def test_detail_page(self):
-        url = reverse('news:detail', args=(self.news.id,))
-        response = self.client.get(url)
-        self.assertEqual(response.status_code, HTTPStatus.OK)
-
-'''
-
-
-'''
-# news/tests/test_routes.py
-from django.test import TestCase
-
-
-class TestRoutes(TestCase):
-
-    def test_home_page(self):
-        # Вызываем метод get для клиента (self.client)
-        # и загружаем главную страницу.
-        response = self.client.get('/')
-        # Проверяем, что код ответа равен 200.
-        self.assertEqual(response.status_code, 200)
-'''
