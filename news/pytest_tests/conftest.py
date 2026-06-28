@@ -1,4 +1,3 @@
-# conftest.py
 """
 Набор фикстур для тестирования приложения заметок (YaNews).
 
@@ -12,12 +11,11 @@
 
 import pytest
 
-# Импортируем класс клиента.
 from django.test.client import Client  # type: ignore
 from datetime import datetime, timedelta
 from django.utils import timezone  # type: ignore
+from django.urls import reverse  # type: ignore
 
-# Импортируем модель заметки, чтобы создать экземпляр.
 from news.models import News, Comment
 
 
@@ -206,16 +204,16 @@ def news_list():
             - text: текст с указанием номера новости;
             - date: дата публикации (убывающая последовательность).
     """
-    news_list = []
     today = datetime.today()
-    for index in range(11):
-        news = News.objects.create(
+    news_objects = [
+        News(
             title=f'Новость №{index + 1}',
-            text=f'Текст новости №{index + 1}. Содержимое тестовой новости.',
-            date=today - timedelta(days=index)
+            text=f'Текст новости №{index + 1}.',
+            date=today - timedelta(days=index),
         )
-        news_list.append(news)
-    return news_list
+        for index in range(11)
+    ]
+    return News.objects.bulk_create(news_objects)
 
 
 @pytest.fixture
@@ -258,3 +256,43 @@ def comment_list(news, author):
         )
         comment_list.append(comment)
     return comment_list
+
+
+@pytest.fixture
+def news_urls():
+    """
+    Фикстура с заранее рассчитанными URL для приложения news.
+
+    Возвращает:
+        dict[str, str]: словарь с именами URL и их значениями.
+    """
+    return {
+        'news:home': reverse('news:home'),
+        'users:login': reverse('users:login'),
+        'users:signup': reverse('users:signup'),
+    }
+
+
+@pytest.fixture
+def news_detail_url(news):
+    """URL страницы новости по её pk."""
+    return reverse('news:detail', kwargs={'pk': news.pk})
+
+
+@pytest.fixture
+def comment_edit_url(comment):
+    """URL редактирования комментария по его pk."""
+    return reverse('news:edit', kwargs={'pk': comment.pk})
+
+
+@pytest.fixture
+def comment_delete_url(comment):
+    """URL удаления комментария по его pk."""
+    return reverse('news:delete', kwargs={'pk': comment.pk})
+
+
+@pytest.fixture
+@pytest.mark.django_db
+def comment_edit_url_for_other(another_comment):
+    """URL для теста по редактированию чужого комментария по его pk."""
+    return reverse("news:edit", args=[another_comment.id])

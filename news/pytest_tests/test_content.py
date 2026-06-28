@@ -12,7 +12,6 @@ import pytest
 from http import HTTPStatus
 
 from django.conf import settings  # type: ignore
-from pytest_lazyfixture import lazy_fixture as lf  # type: ignore
 from django.urls import reverse  # type: ignore
 
 from news.models import Comment
@@ -22,13 +21,13 @@ from news.forms import CommentForm
 @pytest.mark.django_db
 def test_home_availability_for_anonymous_user_and_news_order(
     anonymous_client,
-    news_list
+    news_urls,
+    news_list  # нужен только чтобы создать 11 новостей в БД
 ):
     """Доступность главной страниц для анонимных пользователей и сортировку.
 
     Аргументы:
         anonymous_client (Client): анонимный HTTP‑клиент для запросов.
-        news_list (list[News]): список из 11 тестовых новостей, из фикстуры.
 
     Ожидаемый результат:
         * статус ответа домашней страницы — 200 OK;
@@ -36,14 +35,12 @@ def test_home_availability_for_anonymous_user_and_news_order(
         NEWS_COUNT_ON_HOME_PAGE;
         * новости отсортированы по дате публикации (от новых к старым).
     """
-    assert len(news_list) == 11
-    url = reverse('news:home')
+    url = news_urls['news:home']
     response = anonymous_client.get(url, follow=False)
     assert response.status_code == HTTPStatus.OK.value
     object_list = response.context['object_list']
-    news_count = len(object_list)
-    expected_count = settings.NEWS_COUNT_ON_HOME_PAGE
-    assert news_count == expected_count
+    news_count = object_list.count()
+    assert news_count == settings.NEWS_COUNT_ON_HOME_PAGE
 
     dates = [news.date for news in object_list]
     assert dates == sorted(dates, reverse=True)
@@ -53,12 +50,6 @@ def test_home_availability_for_anonymous_user_and_news_order(
 def test_comments_order(comment_list, news, client):
     """
     Проверяет сортировку комметнариев на странице новости по дате создания.
-
-    Шаги теста:
-    1. Привязывает 11 тестовых комментариев к новости и сохраняет их в БД.
-    2. Выполняет GET‑запрос на страницу новости.
-    3. Извлекает комментарии для этой новости из БД (с сортировкой -created).
-    4. Сравнивает порядок дат создания комментариев с ожидаемым (убывающий).
 
     Аргументы:
         comment_list (list[Comment]): 11 комментариев с убывающими датами
@@ -83,38 +74,46 @@ def test_comments_order(comment_list, news, client):
     )
 
 
-@pytest.mark.parametrize(
-    'parametrized_client, form_on_detail',
-    (
-        (lf('author_client'), True),
-        (lf('anonymous_client'), False),
-    )
-)
 @pytest.mark.django_db
-def test_anonymous_client_has_no_form(
-    news, parametrized_client,
-    form_on_detail
-):
+def test_author_client_sees_comment_form(author_client, news):
     """
-    Тестирует отображение формы комментариев в зависимости от пользователя.
-
-    Для авторизованного пользователя (author_client) ожидается, что форма
-    комментариев (CommentForm) будет присутствовать в контексте шаблона.
-    Для анонимного пользователя (anonymous_client) форма в контексте
-    отсутствовать.
+    Проверяется наличие формы комментария для авторизованного пользователя.
 
     Аргументы:
-        news: экземпляр модели News, используемый для построения URL.
-        parametrized_client: HTTP‑клиент (авторизованный или анонимный).
-        form_on_detail (bool): флаг, указывающий, должна ли форма
-            присутствовать в контексте (True для авторизованных,
-            False для анонимных).
+        author_client (Client): HTTP‑клиент, авторизованный под
+            пользователем‑автором.
+        news (News): экземпляр модели новости, для которой проверяется
+            отображение формы.
+
+    Ожидаемый результат:
+        * статус ответа страницы — 200 OK;
+        * в response.context присутствует ключ 'form';
+        * объект по ключу 'form' является экземпляром класса CommentForm.
     """
     url = reverse('news:detail', kwargs={'pk': news.pk})
-    response = parametrized_client.get(url, follow=False)
+    response = author_client.get(url, follow=False)
+
     assert response.status_code == HTTPStatus.OK.value
-    if form_on_detail:
-        assert 'form' in response.context
-        assert isinstance(response.context['form'], CommentForm)
-    else:
-        assert 'form' not in response.context
+    assert 'form' in response.context
+    assert isinstance(response.context['form'], CommentForm)
+
+
+@pytest.mark.django_db
+def test_anonymous_client_does_not_see_comment_form(anonymous_client, news):
+    """
+    Проверяется наличие формы комментария для анонимного пользователя.
+
+    Аргументы:
+        anonymous_client (Client): анонимный HTTP‑клиент (не авторизован).
+        news (News): экземпляр модели новости, для которой проверяется
+            отсутствие формы.
+
+    Ожидаемый результат:
+        * статус ответа страницы — 200 OK;
+        * в response.context отсутствует ключ 'form'.
+    """
+    url = reverse('news:detail', kwargs={'pk': news.pk})
+    response = anonymous_client.get(url, follow=False)
+
+    assert response.status_code == HTTPStatus.OK.value
+    assert 'form' not in response.context
