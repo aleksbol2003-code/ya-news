@@ -108,7 +108,6 @@ def test_author_can_edit_own_comment(author_client, author, news,
 def test_user_cannot_edit_other_comment(
     author_client,
     another_comment,
-    author,
     news,
     not_author,
     comment_edit_url_for_other
@@ -140,7 +139,6 @@ def test_user_cannot_edit_other_comment(
 
     assert another_comment.text != COMMENT_DATA_EDITED["text"]
     assert another_comment.author == not_author
-    assert author_client.author == author
     assert another_comment.news == news
     assert Comment.objects.count() == 1
 
@@ -174,7 +172,6 @@ def test_author_can_delete_own_comment(
 def test_user_cannot_delete_other_comment(
     author_client,
     not_author,
-    author,
     news,
     another_comment,
     comment_delete_url
@@ -200,7 +197,6 @@ def test_user_cannot_delete_other_comment(
     assert response.status_code == HTTPStatus.FOUND.value
     assert Comment.objects.filter(pk=another_comment.pk).exists()
     assert another_comment.author == not_author
-    assert author_client.author == author
     assert another_comment.news == news
     assert Comment.objects.count() == 1
 
