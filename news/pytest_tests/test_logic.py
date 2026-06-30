@@ -132,12 +132,14 @@ def test_user_cannot_edit_other_comment(
         comment_edit_url_for_other (str): URL для редактирования чужого
                               комментария (соответствует another_comment.pk).
     """
+    original = another_comment.text
     response = author_client.post(
         comment_edit_url_for_other, COMMENT_DATA_EDITED, follow=False)
 
     assert response.status_code == HTTPStatus.NOT_FOUND.value
 
     assert another_comment.text != COMMENT_DATA_EDITED["text"]
+    assert another_comment.text == original
     assert another_comment.author == not_author
     assert another_comment.news == news
     assert Comment.objects.count() == 1
@@ -192,10 +194,12 @@ def test_user_cannot_delete_other_comment(
         another_comment: комментарий, созданный другим пользователем.
         comment_delete_url: URL удаления комментария по его pk.
     """
+    original = another_comment.text
     response = author_client.post(comment_delete_url, follow=False)
 
     assert response.status_code == HTTPStatus.FOUND.value
     assert Comment.objects.filter(pk=another_comment.pk).exists()
+    assert another_comment.text == original
     assert another_comment.author == not_author
     assert another_comment.news == news
     assert Comment.objects.count() == 1
